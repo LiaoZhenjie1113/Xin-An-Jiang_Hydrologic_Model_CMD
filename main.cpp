@@ -190,6 +190,29 @@ void printConfluenceResult(const ConfluenceResult& cr, int step) {
     std::cout << "流量情况 [上游, 下游]: [" << cr.Q[0] << ", " << cr.Q[1] << "]" << std::endl;
     std::cout << "==========================" << std::endl;
 }
+// 定义一个结构体来存储每个时段的完整输出结果，方便后续扩展和输出
+struct OutputRecord {
+    int step;            // 时段序号
+    double P;            // 降雨量 (mm)
+    double E;            // 蒸发能力 (mm)
+    double totalEvap;    // 实际总蒸发量 (E)
+    double EU;           // 上层蒸发量
+    double EL;           // 下层蒸发量
+    double ED;           // 深层蒸发量
+    std::string stage;   // 蒸发阶段描述
+    double R;            // 产流量 (mm)
+    std::string runoffDesc; // 产流描述
+    double Rs;           // 地表径流 (mm)
+    double Ri;           // 壤中流 (mm)
+    double Rg;           // 地下径流 (mm)
+    std::string divisionDesc; // 水源划分描述
+    double QS;           // 地表径流汇流 (m³/s)
+    double QI;           // 壤中流汇流 (m³/s)
+    double QG;           // 地下径流汇流 (m³/s)
+    double QT;           // 总入流 (m³/s)
+    double Q1;           // 上游流量 (m³/s)
+    double Q2;           // 下游流量 (m³/s)
+};
 
 int main() {
     std::cout << "当前工作目录: " << std::filesystem::current_path() << std::endl;
@@ -317,7 +340,7 @@ int main() {
             std::cerr << "程序退出。" << std::endl;
             return 1;
         }
-
+        std::vector<OutputRecord> outputRecords;
         // 逐时段计算
         for (int i = 0; i < envList.size(); ++i) {
             int step = i + 1;
@@ -340,8 +363,77 @@ int main() {
             printConfluenceResult(confluenceResult, step);
 
             std::cout << "\n----------------------------------------\n" << std::endl;
-        }
 
+            // 收集当前时段的结果
+            OutputRecord rec;
+            rec.step = step;
+            rec.P = env.P;
+            rec.E = env.EM;   // 注意：env.EM 已经乘过 KC，为最大蒸发能力
+            rec.totalEvap = evapResult.E;
+            rec.EU = evapResult.EU;
+            rec.EL = evapResult.EL;
+            rec.ED = evapResult.ED;
+            rec.stage = evapResult.stage;
+            rec.R = runoffResult.R;
+            rec.runoffDesc = runoffResult.Runoffdescription;
+            rec.Rs = sdResult.Rs.empty() ? 0.0 : sdResult.Rs.back();
+            rec.Ri = sdResult.Ri;
+            rec.Rg = sdResult.Rg;
+            rec.divisionDesc = sdResult.DivisionDescription;
+            rec.QS = confluenceResult.QS.empty() ? 0.0 : confluenceResult.QS.back();
+            rec.QI = confluenceResult.QI.empty() ? 0.0 : confluenceResult.QI.back();
+            rec.QG = confluenceResult.QG.empty() ? 0.0 : confluenceResult.QG.back();
+            rec.QT = confluenceResult.QT.empty() ? 0.0 : confluenceResult.QT.back();
+            rec.Q1 = confluenceResult.Q1.empty() ? 0.0 : confluenceResult.Q1.back();
+            rec.Q2 = confluenceResult.Q2.empty() ? 0.0 : confluenceResult.Q2.back();
+
+            outputRecords.push_back(rec);   // 需要在 main 开头定义 vector<OutputRecord> outputRecords;
+        }
+        // 询问用户是否保存结果
+        std::cout << "\n是否将计算结果保存到 Output.csv？(y/n): ";
+        std::string saveChoice;
+        std::getline(std::cin, saveChoice);
+        if (saveChoice == "y" || saveChoice == "Y") {
+            std::string filename = "Output.csv";
+            std::ofstream outFile(filename);
+            if (!outFile.is_open()) {
+                std::cerr << "错误：无法创建文件 " << filename << std::endl;
+            }
+            else {
+                // 写入 CSV 标题行（可根据需要增减列）
+                outFile << "时段,P,蒸发能力,总蒸发,EU,EL,ED,蒸发阶段,产流R,产流描述,"
+                    << "地表径流Rs,壤中流Ri,地下径流Rg,水源划分描述,"
+                    << "QS,QI,QG,QT,Q1,Q2\n";
+
+                // 设置浮点数输出格式
+                outFile << std::fixed << std::setprecision(4);
+
+                for (const auto& rec : outputRecords) {
+                    outFile << rec.step << ','
+                        << rec.P << ','
+                        << rec.E << ','
+                        << rec.totalEvap << ','
+                        << rec.EU << ','
+                        << rec.EL << ','
+                        << rec.ED << ','
+                        << rec.stage << ','
+                        << rec.R << ','
+                        << rec.runoffDesc << ','
+                        << rec.Rs << ','
+                        << rec.Ri << ','
+                        << rec.Rg << ','
+                        << rec.divisionDesc << ','
+                        << rec.QS << ','
+                        << rec.QI << ','
+                        << rec.QG << ','
+                        << rec.QT << ','
+                        << rec.Q1 << ','
+                        << rec.Q2 << '\n';
+                }
+                outFile.close();
+                std::cout << "结果已保存到 " << filename << std::endl;
+            }
+        }
     }
     
     catch (const std::invalid_argument& e) {
